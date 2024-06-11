@@ -11,7 +11,7 @@ export default class parseMachine {
 	}
 
 	hasTok() {
-		return (this.i <= this.#s.length);
+		return (this.i < this.#s.length);
 	}
 
 	tok() {
