@@ -1,5 +1,7 @@
-import emailServer from "./src/server";
+import SMTPServer from "./src/SMTP/server";
 
 export default {
-	server: emailServer
+	SMTP: {
+		server: SMTPServer
+	}
 }
