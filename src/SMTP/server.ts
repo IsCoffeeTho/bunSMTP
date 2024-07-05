@@ -11,7 +11,7 @@ export default class SMTPServer {
 	#verifyFn: (address: mailAddress) => boolean | void;
 	#mailFn: (mail: mailEnvelope) => any;
 	constructor(opt?: SMTPServerOptions) {
-		this.addr = opt?.ipaddr ?? "127.0.0.1";
+		this.addr = opt?.host ?? "127.0.0.1";
 		this.port = opt?.port ?? 2525;
 		this.tls = opt?.tls;
 		this.#verifyFn = () => {

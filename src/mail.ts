@@ -2,22 +2,16 @@ import mailAddress from "./address";
 import { SMTPLineRegex } from "./email.d";
 import parseMachine from "./parseMachine";
 
-export default class mailEnvelope {
-	from: mailAddress;
-	to: mailAddress[];
+import {writeFileSync} from "fs";
+
+export class rfc822parser {
 	raw: string;
-	headers: Map<string, string>;
-	body: string;
 	constructor() {
-		this.from =	mailAddress.NULL;
-		this.to = [];
 		this.raw = "";
-		this.headers = new Map<string, string>();
-		this.body = "";
 	}
 
 	build() {
-		this.headers.clear();
+		var envelope = new mailEnvelope();
 		var pm = new parseMachine(this.raw);
 		while (pm.hasTok()) {
 			var line = pm.capture(SMTPLineRegex);
@@ -31,10 +25,22 @@ export default class mailEnvelope {
 			if (!headerName)
 				continue; // discard header
 			headerPM.capture(/:\s*/g); // remove leading whitespace
-			this.headers.set(headerName, headerPM.commit().replace(/\r\n(\s)+/g, (g, wsp) => wsp));
+			envelope.headers.set(headerName, headerPM.commit().replace(/\r\n(\s)+/g, (g, wsp) => wsp));
 		}
-		this.body = pm.commit();
+		envelope.body = pm.commit();
+		return envelope;
 	}
+}
 
-	static NULL = new mailEnvelope();
+export class mailEnvelope {
+	headers: Map<string, string> = new Map<string, string>();
+	body: string = "";
+
+	asEML() {
+		var headers = "";
+		this.headers.forEach((v, k) => {
+			headers += `${k}=${v}\r\n`;
+		})
+		return `${headers}\r\n${this.body}`;
+	}
 }

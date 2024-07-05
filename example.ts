@@ -1,9 +1,9 @@
-import email from "./.";
+import bunSMTP from "./.";
 import type mailAddress from "./src/address";
-import type mailEnvelope from "./src/mail";
+import type { mailEnvelope } from "./src/mail";
 
-const server = new email.SMTP.server({
-	ipaddr: process.env["SMTP_ADDR"] ?? "localhost",
+const server = new bunSMTP.server({
+	host: process.env["SMTP_ADDR"] ?? "localhost",
 	port: parseInt(process.env["SMTP_PORT"] ?? "2525"),
 	tls: {
 		cert: Bun.file(process.env["SMTP_CERT"] ?? ""),
@@ -12,7 +12,8 @@ const server = new email.SMTP.server({
 });
 
 server.verifyAddress((address: mailAddress) => {
-	if (address.localPart == "aaron") return true;
+	if (address.localPart == "contact")
+		return true;
 	return false;
 });
 
@@ -21,5 +22,3 @@ server.mail((mail: mailEnvelope) => {
 });
 
 server.begin();
-
-console.log(server.addr, server.port);

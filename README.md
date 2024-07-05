@@ -1,41 +1,37 @@
 # emailjs
 
-Provides an SMTP and IMAP server over TCP.
+Runs a very minimal SMTP server on bun.
 
 ```ts
-// 
-import email from "./.";
+// example.ts
+import bunSMTP from "./.";
+import type mailAddress from "./src/address";
+import type mailEnvelope from "./src/mail";
 
-const server = new email.server({
-	smtp: {
-		ipaddr: "192.168.1.X",
-		port: 25,
-		domain: "home.mail"
+const server = new bunSMTP.server({
+	host: process.env["SMTP_ADDR"] ?? "localhost",
+	port: parseInt(process.env["SMTP_PORT"] ?? "2525"),
+	tls: { // optional 
+		cert: Bun.file(process.env["SMTP_CERT"] ?? ""),
+		key: Bun.file(process.env["SMTP_KEY"] ?? "")
 	}
 });
 
-server.auth((credentials) => {
-	switch (credentials.type) {
-		case "PLAIN":
-			break;
-		default:
-			break;
-	}
+server.verifyAddress((address: mailAddress) => {
+	if (address.localPart == "contact")
+		return true;
+	return false;
+});
+
+server.mail((mail: mailEnvelope) => {
+	console.log(mail);
 });
 
 server.begin();
 ```
 
-## Installation
-
-To install dependencies:
+## Usage
 
 ```bash
-bun install
-```
-
-To run:
-
-```bash
-bun run index.ts
+bun install bunSMTP
 ```

@@ -1,0 +1,29 @@
+Content-Type: multipart/alternative;
+ boundary="--_NmP-b68df9fbc23cb325-Part_1"
+From: SMTP Test User <aaron.menadue@gmail.com>
+To: contact@cwyl.org
+Subject: Basic SMTP Test Mail via cwyl.org
+Message-ID: <5517d804-aac6-bd92-5a97-d6c87e934144@gmail.com>
+Date: Fri, 05 Jul 2024 02:43:07 +0000
+MIME-Version: 1.0
+
+Content-Type: multipart/alternative;
+ boundary="--_NmP-b68df9fbc23cb325-Part_1"
+From: SMTP Test User <aaron.menadue@gmail.com>
+To: contact@cwyl.org
+Subject: Basic SMTP Test Mail via cwyl.org
+Message-ID: <5517d804-aac6-bd92-5a97-d6c87e934144@gmail.com>
+Date: Fri, 05 Jul 2024 02:43:07 +0000
+MIME-Version: 1.0
+
+----_NmP-b68df9fbc23cb325-Part_1
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Testing test mail via cwyl.org. Nothing to worry.
+----_NmP-b68df9fbc23cb325-Part_1
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+<p>Testing test mail via cwyl.org.</p><p>Nothing to worry.</p>
+----_NmP-b68df9fbc23cb325-Part_1--

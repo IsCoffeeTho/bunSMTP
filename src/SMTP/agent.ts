@@ -3,7 +3,7 @@ import pkg from "../../package.json";
 import parseMachine from "../parseMachine";
 import { MailAddressRegex, SMTPLineRegex } from "../email.d";
 import mailAddress from "../address";
-import mailEnvelope from "../mail";
+import { mailEnvelope, rfc822parser } from "../mail";
 
 enum clientState {
 	CONNECTED,
@@ -28,14 +28,22 @@ export default class SMTPAgent {
 	state: clientState;
 	#packetBuffer: string;
 	#serverFunctions: serverFunctionList;
-	#mailBuffer: mailEnvelope;
+	#mailBuffer: {
+		from: mailAddress,
+		to: mailAddress[],
+		builder: rfc822parser
+	};
 	constructor(socket: Socket<SMTPAgent>, serverFNs: serverFunctionList) {
 		this.socket = socket;
 		this.state = clientState.CONNECTED;
 		this.send(`220 ${process.env["HOSTNAME"]} ESMPT emailjs v${pkg.version}`);
 		this.#packetBuffer = "";
 		this.#serverFunctions = serverFNs;
-		this.#mailBuffer = mailEnvelope.NULL;
+		this.#mailBuffer = {
+			from: mailAddress.NULL,
+			to: [],
+			builder: new rfc822parser()
+		}
 	}
 
 	onCommand(command: string, params: string[]) {
@@ -57,6 +65,11 @@ export default class SMTPAgent {
 				return;
 			case clientState.CONNECTED:
 				this.state = clientState.IDLE;
+				if (command.startsWith("HTTP")) { // stops fetch requests from sending emails
+					this.state = clientState.CLOSED;
+					this.socket.end();
+					return;
+				}
 				if (command == "HELO") this.send(`250 OK`);
 				else if (command == "EHLO") this.send(`250-${process.env["HOSTNAME"]}`, `250 HELP`);
 				else {
@@ -71,8 +84,11 @@ export default class SMTPAgent {
 					fromLine.capture(/[^<]*</g);
 					var addr = fromLine.capture(MailAddressRegex);
 					if (!addr) return this.send("501 email address is invalid");
-					this.#mailBuffer = new mailEnvelope();
-					this.#mailBuffer.from = new mailAddress(addr);
+					this.#mailBuffer = {
+						from : new mailAddress(addr),
+						to: [],
+						builder: new rfc822parser()
+					}
 					this.state = clientState.TRANSPORT;
 					this.send("250 OK");
 				} else {
@@ -95,6 +111,10 @@ export default class SMTPAgent {
 					this.#mailBuffer.to.push(mailaddr);
 					this.send("250 OK");
 				} else if (command == "DATA") {
+					if (this.#mailBuffer.to.length == 0) {
+						this.send("550 No Valid Recipients have been provided");
+						return;
+					}
 					this.state = clientState.MESSAGE;
 					this.send("354 End data with <CR><LF>.<CR><LF>");
 				} else this.send(`535 Bad sequence of commands`);
@@ -120,17 +140,18 @@ export default class SMTPAgent {
 
 		while (true) {
 			if (this.state == clientState.MESSAGE) {
+				var builder = this.#mailBuffer.builder;
 				while (pm.hasTok()) {
-					this.#mailBuffer.raw += pm.tok();
+					builder.raw += pm.tok();
 					pm.adv();
-					if (this.#mailBuffer.raw.endsWith("\r\n.\r\n")) break;
+					if (builder.raw.endsWith("\r\n.\r\n")) break;
 				}
-				if (this.#mailBuffer.raw.endsWith("\r\n.\r\n")) {
-					this.#mailBuffer.raw = this.#mailBuffer.raw.slice(0, -5);
-					this.#mailBuffer.build();
+				if (builder.raw.endsWith("\r\n.\r\n")) {
+					builder.raw = builder.raw.slice(0, -5);
+					builder.build();
 					this.state = clientState.IDLE;
 					(async () => {
-						this.#serverFunctions.mail(this.#mailBuffer);
+						this.#serverFunctions.mail(builder.build());
 					})();
 					this.send("250 OK");
 				}
