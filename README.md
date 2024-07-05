@@ -1,4 +1,4 @@
-# emailjs
+# bunSMTP
 
 Runs a very minimal SMTP server on bun.
 
