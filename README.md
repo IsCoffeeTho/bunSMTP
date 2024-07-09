@@ -9,9 +9,9 @@ import type mailAddress from "./src/address";
 import type mailEnvelope from "./src/mail";
 
 const server = new bunSMTP.server({
-	host: process.env["SMTP_ADDR"] ?? "localhost",
-	port: parseInt(process.env["SMTP_PORT"] ?? "2525"),
-	tls: { // optional 
+	host: "::",
+	port: 1465,
+	tls: {
 		cert: Bun.file(process.env["SMTP_CERT"] ?? ""),
 		key: Bun.file(process.env["SMTP_KEY"] ?? "")
 	}
@@ -34,4 +34,4 @@ server.begin();
 
 ```bash
 bun install bunSMTP
-```
+``` 

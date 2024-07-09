@@ -1,8 +1,8 @@
-import type { TCPSocketListenOptions, TLSOptions } from "bun";
+import type { BunFile, TCPSocketListenOptions, TLSOptions } from "bun";
 import type { SMTPServerOptions } from "../email.d";
 import SMTPAgent from "./agent";
 import type mailAddress from "../address";
-import type mailEnvelope from "../mail";
+import type { mailEnvelope } from "../mail";
 
 export default class SMTPServer {
 	addr: string;
@@ -13,13 +13,14 @@ export default class SMTPServer {
 	constructor(opt?: SMTPServerOptions) {
 		this.addr = opt?.host ?? "127.0.0.1";
 		this.port = opt?.port ?? 2525;
-		this.tls = opt?.tls;
 		this.#verifyFn = () => {
 			return false;
 		};
 		this.#mailFn = () => {
 			return false;
 		};
+		if (opt?.tls)
+			this.tls = opt.tls;
 	}
 
 	verifyAddress(fn: (address: mailAddress) => boolean | void) {
@@ -34,6 +35,7 @@ export default class SMTPServer {
 			verify: this.#verifyFn,
 			mail: this.#mailFn
 		};
+		var _this = this;
 		var socketBuild: TCPSocketListenOptions<SMTPAgent> = {
 			hostname: this.addr,
 			port: this.port,
@@ -42,13 +44,12 @@ export default class SMTPServer {
 					skt.data = new SMTPAgent(skt, serverFunctions);
 				},
 				data(skt, data) {
-					skt.data.onData(data);
+					skt.data.onSocket(data);
 				}
 			}
 		};
-
-		if (this.tls) socketBuild.tls = this.tls;
-
+		if (this.tls)
+			socketBuild.tls = this.tls;
 		Bun.listen<SMTPAgent>(socketBuild);
 	}
 }

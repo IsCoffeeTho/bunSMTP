@@ -1,9 +1,11 @@
-import type { Socket } from "bun";
+import type { Socket, TLSOptions, TLSSocket } from "bun";
 import pkg from "../../package.json";
 import parseMachine from "../parseMachine";
 import { MailAddressRegex, SMTPLineRegex } from "../email.d";
 import mailAddress from "../address";
 import { mailEnvelope, rfc822parser } from "../mail";
+import TLS from "node:tls";
+import { Duplex } from "node:stream";
 
 enum clientState {
 	CONNECTED,
@@ -12,6 +14,8 @@ enum clientState {
 	HEADERS,
 	MESSAGE,
 	AUTHING,
+	STARTTLS,
+	TLS_NEGOTIATE,
 	CLOSED
 }
 
@@ -26,7 +30,7 @@ type serverFunctionList = {
 export default class SMTPAgent {
 	socket: Socket<SMTPAgent>;
 	state: clientState;
-	#packetBuffer: string;
+	#packetBuffer: string = "";
 	#serverFunctions: serverFunctionList;
 	#mailBuffer: {
 		from: mailAddress,
@@ -37,7 +41,6 @@ export default class SMTPAgent {
 		this.socket = socket;
 		this.state = clientState.CONNECTED;
 		this.send(`220 ${process.env["HOSTNAME"]} ESMPT emailjs v${pkg.version}`);
-		this.#packetBuffer = "";
 		this.#serverFunctions = serverFNs;
 		this.#mailBuffer = {
 			from: mailAddress.NULL,
@@ -71,7 +74,10 @@ export default class SMTPAgent {
 					return;
 				}
 				if (command == "HELO") this.send(`250 OK`);
-				else if (command == "EHLO") this.send(`250-${process.env["HOSTNAME"]}`, `250 HELP`);
+				else if (command == "EHLO") {
+					var extendedHELO: string[] = [];
+					this.send(`250-${process.env["HOSTNAME"]}`, ...extendedHELO, `250 HELP`);
+				}
 				else {
 					this.state = clientState.CONNECTED;
 					this.send("503 Bad sequence of commands (HELO or EHLO expected)");
@@ -85,7 +91,7 @@ export default class SMTPAgent {
 					var addr = fromLine.capture(MailAddressRegex);
 					if (!addr) return this.send("501 email address is invalid");
 					this.#mailBuffer = {
-						from : new mailAddress(addr),
+						from: new mailAddress(addr),
 						to: [],
 						builder: new rfc822parser()
 					}
@@ -104,8 +110,6 @@ export default class SMTPAgent {
 					var mailaddr = new mailAddress(addr);
 					if (this.#mailBuffer.to.indexOf(mailaddr) != -1)
 						return this.send("250 Address Already Recipient");
-					if (mailaddr.domain != process.env["HOSTNAME"])
-						return this.send(`551 User not local; please try ${mailaddr.domain}`);
 					if (!this.#serverFunctions.verify(mailaddr))
 						return this.send("252 User not verifiable");
 					this.#mailBuffer.to.push(mailaddr);
@@ -128,6 +132,10 @@ export default class SMTPAgent {
 
 	send(...data: string[]) {
 		this.socket.write(data.join("\r\n") + "\r\n");
+	}
+
+	onSocket(data: Buffer) {
+		this.onData(data);
 	}
 
 	onData(data: Buffer) {
