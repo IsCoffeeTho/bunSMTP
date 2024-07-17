@@ -159,11 +159,13 @@ export default class SMTPAgent {
 				}
 				if (builder.raw.endsWith("\r\n.\r\n")) {
 					builder.raw = builder.raw.slice(0, -5);
-					builder.build();
 					this.state = clientState.IDLE;
 					this.send("250 OK");
 					(async () => {
-						this.#serverFunctions.mail(builder.build());
+						var mail = builder.build();
+						mail.Sender = this.#mailBuffer.from;
+						mail.Recipients = this.#mailBuffer.to;
+						this.#serverFunctions.mail(mail);
 					})();
 				}
 				break;
