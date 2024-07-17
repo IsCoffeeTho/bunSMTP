@@ -18,7 +18,7 @@ server.verifyAddress((address: mailAddress) => {
 });
 
 server.mail((mail: mailEnvelope) => {
-	console.log(mail.asEML());
+	console.log(mail);
 });
 
 server.begin();

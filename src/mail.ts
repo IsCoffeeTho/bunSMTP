@@ -11,7 +11,7 @@ export class rfc822parser {
 	}
 
 	build() {
-		var envelope = new mailEnvelope();
+		var message = new mailEnvelope();
 		var pm = new parseMachine(this.raw);
 		while (pm.hasTok()) {
 			var line = pm.capture(SMTPLineRegex);
@@ -25,20 +25,20 @@ export class rfc822parser {
 			if (!headerName)
 				continue; // discard header
 			headerPM.capture(/:\s*/g); // remove leading whitespace
-			envelope.headers.set(headerName, headerPM.commit().replace(/\r\n(\s)+/g, (g, wsp) => wsp));
+			message.headers.set(headerName, headerPM.commit().replace(/\r\n(\s)+/g, (g, wsp) => wsp));
 		}
-		var MIMEType = envelope.headers.get("Content-Type");
+		var MIMEType = message.headers.get("Content-Type");
 		if (!MIMEType?.startsWith("multipart/alternative;")) {
-			envelope.body = pm.commit();
-			return envelope;
+			message.body = pm.commit();
+			return message;
 		}
 		var boundarySegment = MIMEType.match(/boundary="([^"]+)"/g);
 		var boundary = "";
 		if (boundarySegment) {
-			boundary = boundarySegment[0].slice('boundary="'.length,-1);
+			boundary = boundarySegment[0].slice('boundary="'.length, -1);
 		}
-		envelope.body = {};
-		envelope.boundary = boundary;
+		message.body = {};
+		message.boundary = boundary;
 		var multipart = pm.commit().split(`--${boundary}`);
 		multipart.pop();
 		multipart.shift();
@@ -46,7 +46,7 @@ export class rfc822parser {
 			var section = multipart[part];
 			if (section.startsWith("--"))
 				break;
-			var envelopePart = new mailEnvelope();
+			var messagePart = new mailPart();
 			var partPM = new parseMachine(section.slice(2));
 			while (partPM.hasTok()) {
 				var line = partPM.capture(SMTPLineRegex);
@@ -60,20 +60,38 @@ export class rfc822parser {
 				if (!headerName)
 					continue; // discard header
 				headerPM.capture(/:\s*/g); // remove leading whitespace
-				envelopePart.headers.set(headerName, headerPM.commit().replace(/\r\n(\s)+/g, (g, wsp) => wsp));
+				messagePart.headers.set(headerName, headerPM.commit().replace(/\r\n(\s)+/g, (g, wsp) => wsp));
 			}
-			envelopePart.body = partPM.commit();
-			envelope.body[(envelopePart.headers.get("Content-Type")?.match(/[^;]+/g) ?? ["unknown/undefined"])[0]] = envelopePart;
+			messagePart.content = partPM.commit();
+			message.body[(messagePart.headers.get("Content-Type")?.match(/[^;]+/g) ?? ["unknown/undefined"])[0]] = messagePart;
 		}
-		return envelope;
+		return message;
 	}
 }
 
-export class mailEnvelope {
+export class mailPart {
 	headers: Map<string, string> = new Map<string, string>();
-	body: string | { [type: string]: mailEnvelope } = "";
+	content: string = "";
+
+	asEML() {
+		var headers = "";
+		this.headers.forEach((v, k) => {
+			headers += `${k}: ${v}\r\n`;
+		})
+		return `${headers}\r\n${this.content}`;
+	}
+}
+
+export class mailEnvelope extends mailPart {
+	Recipients: mailAddress[] = [];
+	Sender: mailAddress = mailAddress.NULL;
+	body: string | { [_: string]: mailPart } = "";
 	boundary?: string;
-	
+
+	constructor() {
+		super();
+	}
+
 	asEML() {
 		var headers = "";
 		this.headers.forEach((v, k) => {

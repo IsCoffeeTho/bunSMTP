@@ -76,7 +76,7 @@ export default class SMTPAgent {
 				if (command == "HELO") this.send(`250 OK`);
 				else if (command == "EHLO") {
 					var extendedHELO: string[] = [];
-					this.send(`250-${process.env["HOSTNAME"]}`, ...extendedHELO, `250 HELP`);
+					this.send(`250-${process.env["HOSTNAME"]}`, `250-AUTH GSSAPI DIGEST-MD5`, ...extendedHELO, `250 HELP`);
 				}
 				else {
 					this.state = clientState.CONNECTED;
@@ -84,7 +84,10 @@ export default class SMTPAgent {
 				}
 				return;
 			case clientState.IDLE:
-				if (command == "MAIL") {
+				if (command == "AUTH") {
+					/** @TODO Implement auth */
+					this.send('235 AUTH not implemented yet');
+				} else if (command == "MAIL") {
 					const fromLine = new parseMachine(params[0]);
 					fromLine.capture(/FROM:/g);
 					fromLine.capture(/[^<]*</g);
@@ -158,10 +161,10 @@ export default class SMTPAgent {
 					builder.raw = builder.raw.slice(0, -5);
 					builder.build();
 					this.state = clientState.IDLE;
+					this.send("250 OK");
 					(async () => {
 						this.#serverFunctions.mail(builder.build());
 					})();
-					this.send("250 OK");
 				}
 				break;
 			}
