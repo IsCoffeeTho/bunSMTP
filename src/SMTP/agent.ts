@@ -1,13 +1,15 @@
-import type { Socket, TLSOptions, TLSSocket } from "bun";
+import { Socket } from "net";
 import pkg from "../../package.json";
 import parseMachine from "../parseMachine";
-import { MailAddressRegex, SMTPLineRegex } from "../email.d";
 import mailAddress from "../address";
-import { mailEnvelope, rfc822parser } from "../mail";
+import { rfc822parser } from "../mail";
 import TLS from "node:tls";
 import { Duplex } from "node:stream";
+import type SMTPServer from "./server";
+import bunSMTP, { MailAddressRegex, SMTPLineRegex } from "../..";
 
 enum clientState {
+	HANDSHAKE,
 	CONNECTED,
 	IDLE,
 	TRANSPORT,
@@ -19,44 +21,44 @@ enum clientState {
 	CLOSED
 }
 
-type serverFunctionList = {
-	verify(address: mailAddress): boolean | void;
-	mail(packet: mailEnvelope): any;
-};
+enum clientRole {
+	undetermined,
+	sender,
+	reciever
+}
+
+type mailBufferType = {
+	from: mailAddress,
+	to: mailAddress[],
+	builder: rfc822parser
+}
 
 /**
  * @see {@link https://datatracker.ietf.org/doc/html/rfc2821}
  */
 export default class SMTPAgent {
-	socket: Socket<SMTPAgent>;
-	state: clientState;
+	socket: Socket;
+	role: clientRole = clientRole.undetermined;
+	state: clientState = clientState.HANDSHAKE;
+	#server: SMTPServer;
 	#packetBuffer: string = "";
-	#serverFunctions: serverFunctionList;
-	#mailBuffer: {
-		from: mailAddress,
-		to: mailAddress[],
-		builder: rfc822parser
+	#mailBuffer: mailBufferType = {
+		from: new mailAddress("null@null"),
+		to: [],
+		builder: new rfc822parser()
 	};
-	constructor(socket: Socket<SMTPAgent>, serverFNs: serverFunctionList) {
+	constructor(server: SMTPServer, socket: Socket) {
+		this.#server = server;
 		this.socket = socket;
-		this.state = clientState.CONNECTED;
-		this.send(`220 ${process.env["HOSTNAME"]} ESMPT emailjs v${pkg.version}`);
-		this.#serverFunctions = serverFNs;
-		this.#mailBuffer = {
-			from: mailAddress.NULL,
-			to: [],
-			builder: new rfc822parser()
-		}
+	}
+
+	HELO() {
+		this.send(`220 ${process.env["HOSTNAME"]} ESMPT ${pkg.name} v${pkg.version}`);
 	}
 
 	onCommand(command: string, params: string[]) {
-		if (command == "HELP") {
-			if (this.state != clientState.CONNECTED) return this.send("503 Bad sequence of commands (HELO or EHLO expected)");
-			/** @TODO Add Help Response */
-			var commands = [
-				"HELP: Shows this message"
-			];
-			this.send(`214`); // help response
+		if (command == "NOOP") {
+			return this.send("240 OK");
 		} else if (command == "QUIT") {
 			this.socket.end("221 Bye\r\n");
 			this.state = clientState.CLOSED;
@@ -76,7 +78,15 @@ export default class SMTPAgent {
 				if (command == "HELO") this.send(`250 OK`);
 				else if (command == "EHLO") {
 					var extendedHELO: string[] = [];
-					this.send(`250-${process.env["HOSTNAME"]}`, `250-AUTH GSSAPI DIGEST-MD5`, ...extendedHELO, `250 HELP`);
+					extendedHELO.push(`${process.env["HOSTNAME"]}`);
+					if (this.#server.authMethods.length != 0)
+						extendedHELO.push(`AUTH ${this.#server.authMethods.join(" ")}`);
+					extendedHELO.push('STARTTLS');
+					this.send(...extendedHELO.map((v, i, a) => {
+						if (i == a.length)
+							return `250 ${v}`;
+						return `250-${v}`;
+					}));
 				}
 				else {
 					this.state = clientState.CONNECTED;
@@ -87,6 +97,7 @@ export default class SMTPAgent {
 				if (command == "AUTH") {
 					/** @TODO Implement auth */
 					this.send('235 AUTH not implemented yet');
+					this.role = clientRole.sender;
 				} else if (command == "MAIL") {
 					const fromLine = new parseMachine(params[0]);
 					fromLine.capture(/FROM:/g);
@@ -113,8 +124,8 @@ export default class SMTPAgent {
 					var mailaddr = new mailAddress(addr);
 					if (this.#mailBuffer.to.indexOf(mailaddr) != -1)
 						return this.send("250 Address Already Recipient");
-					if (!this.#serverFunctions.verify(mailaddr))
-						return this.send("252 User not verifiable");
+					// if (!this.#serverFunctions.verify(mailaddr))
+					// 	return this.send("252 User not verifiable");
 					this.#mailBuffer.to.push(mailaddr);
 					this.send("250 OK");
 				} else if (command == "DATA") {
@@ -165,7 +176,7 @@ export default class SMTPAgent {
 						var mail = builder.build();
 						mail.Sender = this.#mailBuffer.from;
 						mail.Recipients = this.#mailBuffer.to;
-						this.#serverFunctions.mail(mail);
+						this.#server.emit("mail", mail);
 					})();
 				}
 				break;

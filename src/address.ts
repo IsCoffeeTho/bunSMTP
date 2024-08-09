@@ -1,4 +1,4 @@
-import { MailAddressRegex } from "./email.d";
+import { MailAddressRegex } from "../.";
 
 export default class mailAddress {
 	localPart: string;
@@ -14,11 +14,4 @@ export default class mailAddress {
 	toString() {
 		return `${this.localPart}@${this.domain}`;
 	}
-
-	static NULL = (() => {
-		var n = new mailAddress("null@null");
-		n.localPart = "";
-		n.domain = "";
-		return n;
-	})();
 }

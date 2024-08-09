@@ -1,24 +1,26 @@
-import bunSMTP from "./.";
+import bunSMTP, {SMTPServer} from ".";
 import type mailAddress from "./src/address";
 import type { mailEnvelope } from "./src/mail";
 
-const server = new bunSMTP.server({
-	host: process.env["SMTP_ADDR"] ?? "localhost",
-	port: parseInt(process.env["SMTP_PORT"] ?? "2525"),
+const server = new SMTPServer({
 	tls: {
 		cert: Bun.file(process.env["SMTP_CERT"] ?? ""),
 		key: Bun.file(process.env["SMTP_KEY"] ?? "")
+	},
+	auth: [
+		"NONE"
+	],
+	onAUTH(ctx: bunSMTP.AuthContext) {
+		
+	},
+	onVRFY(address: mailAddress) {
+		if (address.localPart == "contact")
+			return true;
+		return false;
+	},
+	onMail(mail: mailEnvelope) {
+		console.log(mail);
 	}
 });
 
-server.verifyAddress((address: mailAddress) => {
-	if (address.localPart == "contact")
-		return true;
-	return false;
-});
-
-server.mail((mail: mailEnvelope) => {
-	console.log(mail);
-});
-
-server.begin();
+server.begin(process.env["SMTP_ADDR"] ?? "localhost", process.env["SMTP_PORT"] ?? 1025);

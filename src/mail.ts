@@ -1,8 +1,6 @@
 import mailAddress from "./address";
-import { SMTPLineRegex } from "./email.d";
+import { SMTPLineRegex } from "../.";
 import parseMachine from "./parseMachine";
-
-import { writeFileSync } from "fs";
 
 export class rfc822parser {
 	raw: string;

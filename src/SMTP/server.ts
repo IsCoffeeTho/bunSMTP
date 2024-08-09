@@ -1,55 +1,33 @@
-import type { BunFile, TCPSocketListenOptions, TLSOptions } from "bun";
-import type { SMTPServerOptions } from "../email.d";
+import type { TLSOptions } from "bun";
+import bunSMTP  from "../..";
 import SMTPAgent from "./agent";
-import type mailAddress from "../address";
-import type { mailEnvelope } from "../mail";
+import EventEmitter from "events";
+import net from "net";
 
-export default class SMTPServer {
-	addr: string;
-	port: number;
+export default class SMTPServer extends EventEmitter {
 	tls?: TLSOptions;
-	#verifyFn: (address: mailAddress) => boolean | void;
-	#mailFn: (mail: mailEnvelope) => any;
-	constructor(opt?: SMTPServerOptions) {
-		this.addr = opt?.host ?? "127.0.0.1";
-		this.port = opt?.port ?? 2525;
-		this.#verifyFn = () => {
-			return false;
-		};
-		this.#mailFn = () => {
-			return false;
-		};
-		if (opt?.tls)
-			this.tls = opt.tls;
-	}
-
-	verifyAddress(fn: (address: mailAddress) => boolean | void) {
-		this.#verifyFn = fn;
-	}
-	mail(fn: (mail: mailEnvelope) => any) {
-		this.#mailFn = fn;
-	}
-
-	begin() {
-		var serverFunctions = {
-			verify: this.#verifyFn,
-			mail: this.#mailFn
-		};
+	#implicit: boolean;
+	server: net.Server;
+	authMethods: bunSMTP.AuthMethod[] = [];
+	constructor(opt: bunSMTP.SMTPServerOptions) {
+		super();
+		this.tls = opt.tls;
+		this.#implicit = !!opt.isImplicit; // coerces undefined to false, and boolean to its value
+		if (opt?.auth)
+			this.authMethods.push(...opt.auth);
 		var _this = this;
-		var socketBuild: TCPSocketListenOptions<SMTPAgent> = {
-			hostname: this.addr,
-			port: this.port,
-			socket: {
-				open(skt) {
-					skt.data = new SMTPAgent(skt, serverFunctions);
-				},
-				data(skt, data) {
-					skt.data.onSocket(data);
-				}
-			}
-		};
-		if (this.tls)
-			socketBuild.tls = this.tls;
-		Bun.listen<SMTPAgent>(socketBuild);
+		this.server = net.createServer((socket) => {
+			var sessionID = "*".repeat(40).replace(/./g, () => {
+				return "0123456789abcdefghijklmnopqrstuvwxyz"[Math.floor(Math.random()*36)]				
+			});
+			var agent = new SMTPAgent(_this, socket);
+		});
+	}
+
+	begin(addr: string, port: number | string) {
+		if (typeof port == "string")
+			port = parseInt(port);
+		this.server.on("error", (err) => { throw err; });
+		this.server.listen(port, addr);
 	}
 }
